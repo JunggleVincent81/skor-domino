@@ -1,0 +1,346 @@
+<!DOCTYPE html><html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Domino Score Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-white min-h-screen">
+  <div id="app"></div>
+  <script>
+    const app = document.getElementById('app');const defaultState = {
+  gameName: 'Domino Score Tracker',
+  players: ['', ''],
+  rounds: [],
+  targetScore: 100,
+  winnerRule: 'highest',
+  darkMode: true,
+  gameStarted: false,
+  currentScores: [],
+  quickValues: [0, 5, 10, 25, 50]
+};
+
+let state = loadState();
+
+function loadState() {
+  try {
+    const saved = localStorage.getItem('domino-score-tracker');
+    if (!saved) return structuredClone(defaultState);
+    const parsed = JSON.parse(saved);
+    return {
+      ...structuredClone(defaultState),
+      ...parsed,
+      players: parsed.players?.length ? parsed.players : ['', ''],
+      rounds: parsed.rounds || [],
+      currentScores: parsed.currentScores || []
+    };
+  } catch (err) {
+    return structuredClone(defaultState);
+  }
+}
+
+function saveState() {
+  localStorage.setItem('domino-score-tracker', JSON.stringify(state));
+}
+
+function totals() {
+  return state.players.map((_, index) => state.rounds.reduce((sum, round) => sum + (Number(round.scores[index]) || 0), 0));
+}
+
+function playerNames() {
+  return state.players.map((p, i) => p.trim() || `Pemain ${i + 1}`);
+}
+
+function ranking() {
+  return playerNames()
+    .map((name, index) => ({ name, total: totals()[index], index }))
+    .sort((a, b) => b.total - a.total);
+}
+
+function averageScore(index) {
+  if (!state.rounds.length) return 0;
+  return totals()[index] / state.rounds.length;
+}
+
+function roundWinnersCount(index) {
+  let count = 0;
+  state.rounds.forEach(round => {
+    const maxScore = Math.max(...round.scores.map(Number));
+    if (Number(round.scores[index]) === maxScore) count += 1;
+  });
+  return count;
+}
+
+function currentLeader() {
+  const sorted = ranking();
+  return sorted[0];
+}
+
+function targetWinner() {
+  if (state.winnerRule !== 'target') return null;
+  const scoreTotals = totals();
+  const idx = scoreTotals.findIndex(score => score >= Number(state.targetScore || 0));
+  if (idx === -1) return null;
+  return { name: playerNames()[idx], total: scoreTotals[idx] };
+}
+
+function setPlayers(count) {
+  const next = [];
+  for (let i = 0; i < count; i++) {
+    next.push(state.players[i] || '');
+  }
+  state.players = next;
+  state.currentScores = Array(count).fill('');
+  saveState();
+  render();
+}
+
+function startGame() {
+  state.players = state.players.map((p, i) => p.trim() || `Pemain ${i + 1}`);
+  state.currentScores = Array(state.players.length).fill('');
+  state.gameStarted = true;
+  saveState();
+  render();
+}
+
+function resetGame() {
+  if (!confirm('Mulai game baru? Semua skor akan dihapus.')) return;
+  state = structuredClone(defaultState);
+  saveState();
+  render();
+}
+
+function saveRound() {
+  const scores = state.currentScores.map(value => Number(value) || 0);
+  state.rounds.push({
+    id: Date.now(),
+    scores,
+    createdAt: new Date().toLocaleString('id-ID')
+  });
+  state.currentScores = Array(state.players.length).fill('');
+  saveState();
+  render();
+}
+
+function deleteRound(id) {
+  state.rounds = state.rounds.filter(round => round.id !== id);
+  saveState();
+  render();
+}
+
+function exportData() {
+  const payload = {
+    gameName: state.gameName,
+    players: playerNames(),
+    rounds: state.rounds,
+    totals: totals(),
+    exportedAt: new Date().toISOString()
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'domino-score-data.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function renderSetup() {
+  app.innerHTML = `
+    <div class="max-w-3xl mx-auto p-4 sm:p-6 lg:p-8">
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
+        <h1 class="text-3xl font-bold">🎲 ${state.gameName}</h1>
+        <p class="text-slate-400 mt-2">Catat skor domino per ronde, hitung total otomatis, dan simpan progres di browser.</p>
+
+        <div class="mt-6">
+          <label class="block text-sm text-slate-300 mb-2">Jumlah pemain</label>
+          <div class="flex gap-2 flex-wrap">
+            ${[2,3,4].map(count => `
+              <button onclick="setPlayers(${count})" class="px-4 py-2 rounded-2xl border ${state.players.length === count ? 'bg-cyan-500 text-slate-950 border-cyan-400' : 'border-slate-700 bg-slate-800'}">
+                ${count} pemain
+              </button>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4 mt-6">
+          ${state.players.map((player, index) => `
+            <div>
+              <label class="block text-sm text-slate-300 mb-2">Nama pemain ${index + 1}</label>
+              <input
+                value="${player.replace(/"/g, '&quot;')}"
+                oninput="state.players[${index}] = this.value; saveState();"
+                class="w-full px-4 py-3 rounded-2xl bg-slate-800 border border-slate-700 outline-none"
+                placeholder="Pemain ${index + 1}"
+              />
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4 mt-6">
+          <div>
+            <label class="block text-sm text-slate-300 mb-2">Rule pemenang</label>
+            <select onchange="state.winnerRule=this.value; saveState(); render();" class="w-full px-4 py-3 rounded-2xl bg-slate-800 border border-slate-700">
+              <option value="highest" ${state.winnerRule === 'highest' ? 'selected' : ''}>Skor tertinggi menang</option>
+              <option value="target" ${state.winnerRule === 'target' ? 'selected' : ''}>Capai target skor</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm text-slate-300 mb-2">Target skor</label>
+            <input type="number" value="${state.targetScore}" oninput="state.targetScore=Number(this.value)||0; saveState();" class="w-full px-4 py-3 rounded-2xl bg-slate-800 border border-slate-700" />
+          </div>
+        </div>
+
+        <div class="mt-8 flex flex-wrap gap-3">
+          <button onclick="startGame()" class="px-5 py-3 rounded-2xl bg-cyan-400 text-slate-950 font-semibold">Mulai Game</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderGame() {
+  const totalScores = totals();
+  const ranked = ranking();
+  const leader = currentLeader();
+  const targetHit = targetWinner();
+
+  app.innerHTML = `
+    <div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+      <div class="flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
+        <div>
+          <h1 class="text-3xl font-bold">🎲 ${state.gameName}</h1>
+          <p class="text-slate-400">Ronde: ${state.rounds.length} · Pemimpin: <span class="text-cyan-400 font-semibold">${leader ? leader.name : '-'}</span></p>
+        </div>
+        <div class="flex flex-wrap gap-3">
+          <button onclick="exportData()" class="px-4 py-2 rounded-2xl border border-slate-700 bg-slate-900">Export JSON</button>
+          <button onclick="state.gameStarted=false; saveState(); render();" class="px-4 py-2 rounded-2xl border border-slate-700 bg-slate-900">Pengaturan</button>
+          <button onclick="resetGame()" class="px-4 py-2 rounded-2xl bg-red-500/90">Game Baru</button>
+        </div>
+      </div>
+
+      ${targetHit ? `
+        <div class="bg-emerald-500/10 border border-emerald-500/40 rounded-3xl p-4">
+          <p class="font-semibold text-emerald-300">🏆 ${targetHit.name} sudah mencapai target ${state.targetScore} dengan total ${targetHit.total} poin.</p>
+        </div>
+      ` : ''}
+
+      <div class="grid xl:grid-cols-3 gap-6">
+        <div class="xl:col-span-2 space-y-6">
+          <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-xl font-semibold">Input skor ronde baru</h2>
+              <span class="text-sm text-slate-400">Skor kosong dianggap 0</span>
+            </div>
+            <div class="grid md:grid-cols-2 gap-4">
+              ${playerNames().map((name, index) => `
+                <div class="bg-slate-950 border border-slate-800 rounded-3xl p-4">
+                  <label class="block font-medium mb-3">${name}</label>
+                  <input type="number" value="${state.currentScores[index] ?? ''}" oninput="state.currentScores[${index}] = this.value; saveState();" class="w-full px-4 py-3 rounded-2xl bg-slate-800 border border-slate-700 text-lg" placeholder="0" />
+                  <div class="flex flex-wrap gap-2 mt-3">
+                    ${state.quickValues.map(value => `
+                      <button onclick="state.currentScores[${index}] = ${value}; saveState(); render();" class="px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-sm">${value}</button>
+                    `).join('')}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+            <button onclick="saveRound()" class="w-full mt-5 px-5 py-4 rounded-2xl bg-cyan-400 text-slate-950 font-bold text-lg">Simpan Ronde</button>
+          </div>
+
+          <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 overflow-x-auto">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-xl font-semibold">Riwayat ronde</h2>
+              <span class="text-slate-400 text-sm">Bisa hapus ronde kalau salah input</span>
+            </div>
+            <table class="w-full min-w-[700px] text-left border-collapse">
+              <thead>
+                <tr class="text-slate-400 border-b border-slate-800">
+                  <th class="py-3 pr-4">Ronde</th>
+                  ${playerNames().map(name => `<th class="py-3 pr-4">${name}</th>`).join('')}
+                  <th class="py-3 pr-4">Waktu</th>
+                  <th class="py-3 pr-4">Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${state.rounds.length ? state.rounds.map((round, idx) => `
+                  <tr class="border-b border-slate-900">
+                    <td class="py-3 pr-4 font-medium">${idx + 1}</td>
+                    ${round.scores.map(score => `<td class="py-3 pr-4">${score}</td>`).join('')}
+                    <td class="py-3 pr-4 text-slate-400 text-sm">${round.createdAt}</td>
+                    <td class="py-3 pr-4">
+                      <button onclick="deleteRound(${round.id})" class="px-3 py-2 rounded-xl bg-red-500/20 text-red-300 border border-red-500/30">Hapus</button>
+                    </td>
+                  </tr>
+                `).join('') : `
+                  <tr>
+                    <td colspan="${playerNames().length + 3}" class="py-8 text-center text-slate-500">Belum ada ronde tersimpan.</td>
+                  </tr>
+                `}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="space-y-6">
+          <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5">
+            <h2 class="text-xl font-semibold mb-4">Total skor</h2>
+            <div class="space-y-3">
+              ${playerNames().map((name, index) => `
+                <div class="flex items-center justify-between rounded-2xl bg-slate-950 border border-slate-800 p-4">
+                  <div>
+                    <p class="font-medium">${name}</p>
+                    <p class="text-slate-400 text-sm">Rata-rata: ${averageScore(index).toFixed(1)} / ronde</p>
+                  </div>
+                  <p class="text-2xl font-bold text-cyan-400">${totalScores[index]}</p>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5">
+            <h2 class="text-xl font-semibold mb-4">Ranking</h2>
+            <div class="space-y-3">
+              ${ranked.map((item, index) => `
+                <div class="flex items-center justify-between rounded-2xl ${index === 0 ? 'bg-cyan-400/15 border-cyan-400/30' : 'bg-slate-950 border-slate-800'} border p-4">
+                  <div>
+                    <p class="font-semibold">#${index + 1} ${item.name}</p>
+                    <p class="text-slate-400 text-sm">Menang ronde: ${roundWinnersCount(item.index)}x</p>
+                  </div>
+                  <p class="text-xl font-bold">${item.total}</p>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5">
+            <h2 class="text-xl font-semibold mb-4">Fitur yang sudah ada</h2>
+            <ul class="space-y-2 text-slate-300 text-sm">
+              <li>• 2–4 pemain</li>
+              <li>• Simpan otomatis di browser</li>
+              <li>• Quick score buttons</li>
+              <li>• Ranking & statistik</li>
+              <li>• Export data JSON</li>
+              <li>• Mobile friendly</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function render() {
+  document.body.className = state.darkMode ? 'bg-slate-950 text-white min-h-screen' : 'bg-white text-slate-900 min-h-screen';
+  if (!state.gameStarted) {
+    renderSetup();
+  } else {
+    renderGame();
+  }
+}
+
+render();
+
+  </script>
+</body>
+  </html>
