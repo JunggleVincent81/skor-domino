@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Domino Round Analyzer</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Offline web app</p>
+        <h1>Domino Round Analyzer</h1>
+        <p class="hero-copy">
+          Catat kartu domino yang keluar, kelola tanganmu, lihat sisa angka per ronde,
+          estimasi kemungkinan kartu lawan, dan pantau siapa yang paling sering kalah.
+        </p>
+      </div>
+      <div class="hero-stats" id="heroStats"></div>
+    </header>
+
+    <div id="toast" class="toast hidden" aria-live="polite"></div>
+
+    <main class="layout">
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <p class="section-label">Bagian 1</p>
+            <h2>Setup game</h2>
+          </div>
+          <span class="badge" id="setupBadge">Siap dimainkan</span>
+        </div>
+
+        <div class="grid two">
+          <label>
+            Nama game
+            <input id="gameNameInput" type="text" placeholder="Contoh: Domino Malam Minggu" />
+          </label>
+          <label>
+            Jumlah pemain
+            <select id="playerCountInput"></select>
+          </label>
+          <label>
+            Ukuran tangan awal per pemain
+            <input id="startingHandSizeInput" type="number" min="1" max="28" />
+          </label>
+          <label>
+            Posisi saya
+            <select id="myPlayerSelect"></select>
+          </label>
+        </div>
+
+        <div id="playerNameInputs" class="player-inputs"></div>
+
+        <div class="actions wrap">
+          <button id="applyPlayersBtn" class="primary">Terapkan roster & reset skor</button>
+          <button id="newRoundBtn">Mulai ronde baru</button>
+          <button id="demoBtn">Isi contoh data</button>
+        </div>
+
+        <div id="setupInfo" class="info-box muted"></div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <p class="section-label">Bagian 2</p>
+            <h2>Kelola tangan saya</h2>
+          </div>
+          <span class="badge accent" id="myHandBadge">0 kartu dipilih</span>
+        </div>
+
+        <div class="substats" id="myHandStats"></div>
+        <div id="myHandPicker" class="tile-grid selectable"></div>
+
+        <div class="actions wrap">
+          <button id="clearMyHandBtn">Kosongkan tangan saya</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <p class="section-label">Bagian 3</p>
+            <h2>Catat kartu yang keluar</h2>
+          </div>
+          <span class="badge" id="boardBadge">Board masih kosong</span>
+        </div>
+
+        <div class="grid three">
+          <label>
+            Pemain
+            <select id="playPlayerSelect"></select>
+          </label>
+          <label>
+            Kartu
+            <select id="playTileSelect"></select>
+          </label>
+          <label>
+            Sisi board
+            <select id="playSideSelect">
+              <option value="auto">Auto</option>
+              <option value="left">Kiri</option>
+              <option value="right">Kanan</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="actions wrap">
+          <button id="logPlayBtn" class="primary">Catat kartu keluar</button>
+          <button id="logPassBtn">Pass / tidak bisa jalan</button>
+          <button id="undoRoundActionBtn">Undo aksi ronde</button>
+        </div>
+
+        <div class="board-shell">
+          <div id="boardState" class="board-state"></div>
+          <div id="boardChain" class="board-chain"></div>
+        </div>
+
+        <div>
+          <h3 class="minor-heading">Kartu tersisa per pemain</h3>
+          <div id="handCountControls" class="hand-count-grid"></div>
+        </div>
+
+        <div>
+          <h3 class="minor-heading">Log aksi ronde</h3>
+          <div id="actionLog" class="log-list"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <p class="section-label">Bagian 4</p>
+            <h2>Analisa angka & kartu</h2>
+          </div>
+          <span class="badge accent" id="analysisBadge">Estimasi aktif</span>
+        </div>
+
+        <div id="roundInsights" class="insight-grid"></div>
+
+        <div>
+          <h3 class="minor-heading">Statistik angka 0 sampai 6</h3>
+          <div id="pipTableWrap"></div>
+        </div>
+
+        <div class="grid two">
+          <div>
+            <h3 class="minor-heading">Sisa kartu yang belum terlihat</h3>
+            <div id="unknownTiles" class="tile-grid compact"></div>
+          </div>
+          <div>
+            <h3 class="minor-heading">Semua kartu (status cepat)</h3>
+            <div class="legend-row">
+              <span class="legend-item"><span class="legend-swatch mine"></span> Tangan saya</span>
+              <span class="legend-item"><span class="legend-swatch played"></span> Sudah keluar</span>
+              <span class="legend-item"><span class="legend-swatch unknown"></span> Belum terlihat</span>
+            </div>
+            <div id="allTilesGrid" class="tile-grid compact"></div>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="minor-heading">Estimasi kartu lawan</h3>
+          <div id="opponentEstimates" class="estimate-grid"></div>
+        </div>
+
+        <div class="grid two">
+          <div>
+            <h3 class="minor-heading">Rekomendasi serangan</h3>
+            <div id="attackSuggestions" class="recommendation-list"></div>
+          </div>
+          <div>
+            <h3 class="minor-heading">Kartu yang layak disimpan</h3>
+            <div id="keepSuggestions" class="recommendation-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <p class="section-label">Bagian 5</p>
+            <h2>Skor, history, dan rekap</h2>
+          </div>
+          <span class="badge" id="scoreBadge">Belum ada hasil ronde</span>
+        </div>
+
+        <div>
+          <h3 class="minor-heading">Tabel skor</h3>
+          <div id="scoreboard"></div>
+        </div>
+
+        <div>
+          <h3 class="minor-heading">Tambah kekalahan ronde ini</h3>
+          <p class="hint">
+            Klik tombol <strong>+ kalah</strong> untuk menutup ronde aktif, menambah poin kalah,
+            menyimpan history, lalu otomatis membuka ronde baru.
+          </p>
+          <div id="lossButtons" class="actions wrap"></div>
+        </div>
+
+        <div class="grid two">
+          <div>
+            <h3 class="minor-heading">Analisa pertandingan</h3>
+            <div id="gameSummary" class="summary-box"></div>
+          </div>
+          <div>
+            <h3 class="minor-heading">History ronde</h3>
+            <div id="historyTable"></div>
+          </div>
+        </div>
+
+        <div class="actions wrap">
+          <button id="undoLastRoundBtn">Batalkan hasil ronde terakhir</button>
+          <button id="exportBtn">Export data JSON</button>
+          <label class="file-label">
+            Import data JSON
+            <input id="importFileInput" type="file" accept="application/json,.json" />
+          </label>
+          <button id="resetAllBtn" class="danger">Reset semua data</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
